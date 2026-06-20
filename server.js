@@ -16,7 +16,7 @@ const fs = require("fs");
 const { db, dbPromise } = require("./utils/db");
 const sendMail = require("./utils/mailer");
 const nodemailer = require('nodemailer');//library for sending mails
-
+const { spawn, exec } = require("child_process");
 // ------------------- APP SETUP -------------------
 //const app = express();
 //creating actual server with http
@@ -1947,67 +1947,77 @@ app.get("/api/admin/students-filter", (req, res) => {
   });
 });
 
- app.post("/api/fingerprint/scan",(req, res) => {
+app.post("/api/fingerprint/scan", (req, res) => {
+
+  if (process.env.FINGERPRINT_MODE !== "local") {
+    return res.status(200).json({
+      success: false,
+      message: "Fingerprint only works in local machine mode"
+    });
+  }
+
   const { roll_no } = req.body;
 
-    const exePath =
+  const exePath =
     "C:\\Users\\Yaswanth\\FingerprintApp48\\bin\\Debug\\net48\\FingerprintApp48.exe";
 
-
-  const process = spawn(exePath, ["enroll", roll_no]);
+  const fpScanProcess = spawn(exePath, ["enroll", roll_no]);
 
   let output = "";
 
-  process.stdout.on("data", (data) => {
+  fpScanProcess.stdout.on("data", (data) => {
     output += data.toString();
   });
 
-  process.stderr.on("data", (data) => {
+  fpScanProcess.stderr.on("data", (data) => {
     output += data.toString();
   });
 
- /* process.on("close", () => {
-    console.log("FINAL OUTPUT:", output);
+  fpScanProcess.on("error", (err) => {
+    console.error("Fingerprint process error:", err);
 
-    res.json({
-      success: output.includes("ENROLLED SUCCESS"),
-      output: output
+    return res.status(500).json({
+      success: false,
+      message: "Fingerprint application failed to start"
     });
-  });*/
-  process.on("close", () => {
+  });
+
+  fpScanProcess.on("close", () => {
 
     console.log("===== OUTPUT =====");
     console.log(output);
     console.log("==================");
 
-  if (output.toUpperCase().includes("DUPLICATE_FINGER")) {
+    if (output.toUpperCase().includes("DUPLICATE_FINGER")) {
 
-  return res.json({
-    success: false,
-    duplicate: true,
-    message: "Fingerprint already enrolled"
-  });
+      return res.json({
+        success: false,
+        duplicate: true,
+        message: "Fingerprint already enrolled"
+      });
 
-}
+    }
 
-  if (output.includes("ENROLLED SUCCESS")) {
+    if (output.includes("ENROLLED SUCCESS")) {
+
+      return res.json({
+        success: true,
+        message: "Enrollment successful"
+      });
+
+    }
 
     return res.json({
-      success: true,
-      message: "Enrollment successful"
+      success: false,
+      message: "Enrollment failed"
     });
 
-  }
-
-  return res.json({
-    success: false,
-    message: "Enrollment failed"
   });
 
-});
 });
 
 app.get("/api/fingerprint/status", (req, res) => {
+
 
   const sql = "SELECT roll_no, status FROM fingerprints";
 
@@ -2029,19 +2039,28 @@ app.get("/api/fingerprint/status", (req, res) => {
   });
 });
 
-const { spawn } = require("child_process");
-
-let fpProcess = null; // 🔥 GLOBAL
+let fpProcess = null;
 
 app.post("/api/fingerprint/start-session", (req, res) => {
+
+  if (process.env.FINGERPRINT_MODE !== "local") {
+    return res.json({
+      message: "Not supported in cloud mode"
+    });
+  }
+
   const { subject_name } = req.body;
 
   if (!subject_name) {
-    return res.status(400).json({ message: "Subject missing" });
+    return res.status(400).json({
+      message: "Subject missing"
+    });
   }
 
   if (fpProcess) {
-    return res.json({ message: "Already running" });
+    return res.json({
+      message: "Already running"
+    });
   }
 
   const exePath =
@@ -2057,125 +2076,38 @@ app.post("/api/fingerprint/start-session", (req, res) => {
     console.log("ERR:", data.toString());
   });
 
+  fpProcess.on("error", (err) => {
+    console.error("Fingerprint process error:", err);
+    fpProcess = null;
+  });
+
   fpProcess.on("close", () => {
     console.log("Fingerprint process stopped");
     fpProcess = null;
   });
 
-  res.json({ message: "Attendance started" });
-});
-;
-app.get("/api/fingerprint/attendance-live", (req, res) => {
-  const { subject_name } = req.query;
+  res.json({
+    message: "Attendance started"
+  });
 
-  if (!subject_name) {
-    return res.status(400).json({ message: "Subject missing" });
+});
+app.post("/api/fingerprint/stop-session", (req, res) => {
+
+  if (process.env.FINGERPRINT_MODE !== "local") {
+    return res.json({
+      message: "Not supported in cloud mode"
+    });
   }
 
-  const today = new Date().toISOString().split("T")[0];
-
-  // 1️⃣ Present students (already marked)
-  const presentQuery = `
-    SELECT DISTINCT roll_no 
-    FROM attendance 
-    WHERE subject_name = ? AND date = ?
-  `;
-
-  db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) return res.status(500).json({ message: "DB error" });
-
-    const present = presentRows.map(r => r.roll_no);
-
-    // 2️⃣ All students of subject
-    const allQuery = `
-      SELECT st.roll_no
-      FROM students st
-      JOIN student_subjects ss ON st.roll_no = ss.roll_no
-      WHERE ss.subject_name = ?
-    `;
-
-    db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) return res.status(500).json({ message: "DB error" });
-
-      const allStudents = allRows.map(r => r.roll_no);
-
-      // 3️⃣ Absent = not in present
-      const absent = allStudents.filter(r => !present.includes(r));
-
-      res.json({ present, absent });
-    });
-  });
-});
-const { exec } = require("child_process");
-
-app.post("/api/fingerprint/stop-session", (req, res) => {
   if (fpProcess) {
     fpProcess.kill("SIGTERM");
     fpProcess = null;
   }
 
-  res.json({ message: "Stopped" });
-});
-
-app.post("/api/fingerprint/finalize", (req, res) => {
-  const { subject_name } = req.body;
-
-  if (!subject_name) {
-    return res.status(400).json({ message: "Subject missing" });
-  }
-
-  const today = new Date().toISOString().split("T")[0];
-
-  // 1️⃣ Get all students of subject
-  const allQuery = `
-    SELECT st.roll_no
-    FROM students st
-    JOIN student_subjects ss ON st.roll_no = ss.roll_no
-    WHERE ss.subject_name = ?
-  `;
-
-  db.query(allQuery, [subject_name], (err, allRows) => {
-    if (err) return res.status(500).json({ message: "DB error" });
-
-    const allStudents = allRows.map(r => r.roll_no);
-
-    // 2️⃣ Get present students
-    const presentQuery = `
-      SELECT roll_no 
-      FROM attendance 
-      WHERE subject_name = ? AND date = ?
-    `;
-
-    db.query(presentQuery, [subject_name, today], (err2, presentRows) => {
-      if (err2) return res.status(500).json({ message: "DB error" });
-
-      const present = presentRows.map(r => r.roll_no);
-
-      // 3️⃣ Find absentees
-      const absent = allStudents.filter(r => !present.includes(r));
-
-      if (absent.length === 0) {
-        return res.json({ message: "No absentees to mark" });
-      }
-
-      // 4️⃣ Insert absentees
-      const values = absent.map(r => [r, subject_name, today, "Absent"]);
-
-      const insertQuery = `
-        INSERT INTO attendance (roll_no, subject_name, date, status)
-        VALUES ?
-      `;
-
-      db.query(insertQuery, [values], (err3) => {
-        if (err3) return res.status(500).json({ message: "Insert failed" });
-
-        res.json({
-          message: "Attendance finalized ✅",
-          absentCount: absent.length
-        });
-      });
-    });
+  res.json({
+    message: "Stopped"
   });
+
 });
 
 ////////////////////////////////
