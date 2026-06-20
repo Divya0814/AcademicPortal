@@ -20,14 +20,15 @@ const nodemailer = require('nodemailer');//library for sending mails
 // ------------------- APP SETUP -------------------
 //const app = express();
 //creating actual server with http
+require("dotenv").config();
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: "*" }
+  cors: { origin: "*" } 
 });
 const PORT = 5000;
-const SECRET_KEY = "YOUR_SECRET_KEY"; // change this
-
+//const SECRET_KEY = "YOUR_SECRET_KEY"; // change this
+const SECRET_KEY = process.env.SECRET_KEY;
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -1826,14 +1827,20 @@ app.post("/send-otp", async (req, res) => {
   console.log("OTP Saved:", otpStore[username]);
 
   // ---- SEND EMAIL ----
-  const transporter = nodemailer.createTransport({
+ /* const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
       user: "saidivya096@gmail.com",
       pass: "grwjscitjrcacjjx"
     }
-  });
-
+  }); */
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
   const mailOptions = {
     from: "saidivya096@gmail.com",
     to: email,

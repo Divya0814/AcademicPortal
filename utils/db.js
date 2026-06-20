@@ -1,10 +1,13 @@
+// db.js
+require("dotenv").config();
+
 const mysql = require("mysql2");
 
 const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "saidivya",
-    database: "college_db"
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME
 });
 
 db.connect((err) => {
@@ -14,10 +17,8 @@ db.connect((err) => {
         console.log("✅ MySQL Connected");
     }
 });
-// Export both versions
+
 module.exports = {
-    db,             // callback-style queries
-    dbPromise: db.promise()  // promise-based queries for async/await
+    db,
+    dbPromise: db.promise()
 };
-//module.exports = db;
-//module.exports = db.promise();   // IMPORTANT
