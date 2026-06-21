@@ -2036,67 +2036,46 @@ app.post("/api/fingerprint/start-session", async (req, res) => {
 // LIVE ATTENDANCE API
 // =====================
 app.get("/api/fingerprint/attendance-live", (req, res) => {
-  const { subject_name } = req.query;
+  let { subject_name } = req.query;
 
   if (!subject_name) {
     return res.status(400).json({ message: "Subject missing" });
   }
 
-  // ✅ FIXED: India timezone date (VERY IMPORTANT)
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata"
-  });
+  // ✅ FIX: remove bracket text like "(Y3 S5)"
+  subject_name = subject_name.split("(")[0].trim();
 
-  // =========================
-  // 1. PRESENT STUDENTS
-  // =========================
+  const today = new Date().toISOString().split("T")[0];
+
   const presentQuery = `
-    SELECT DISTINCT roll_no
-    FROM attendance
-    WHERE LOWER(subject_name) = LOWER(?)
-    AND DATE(date) = ?
-    AND TRIM(LOWER(status)) = 'present'
+    SELECT DISTINCT roll_no 
+    FROM attendance 
+    WHERE subject_name = ? AND date = ?
   `;
 
   db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) {
-      console.error("Present Query Error:", err);
-      return res.status(500).json({ message: "DB error (present)" });
-    }
+    if (err) return res.status(500).json({ message: "DB error" });
 
     const present = presentRows.map(r => r.roll_no);
 
-    // =========================
-    // 2. ALL STUDENTS
-    // =========================
     const allQuery = `
       SELECT st.roll_no
       FROM students st
       JOIN student_subjects ss ON st.roll_no = ss.roll_no
-      WHERE LOWER(ss.subject_name) = LOWER(?)
+      WHERE ss.subject_name = ?
     `;
 
     db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) {
-        console.error("All Students Query Error:", err2);
-        return res.status(500).json({ message: "DB error (students)" });
-      }
+      if (err2) return res.status(500).json({ message: "DB error" });
 
       const allStudents = allRows.map(r => r.roll_no);
 
-      // =========================
-      // 3. ABSENT CALCULATION
-      // =========================
       const absent = allStudents.filter(r => !present.includes(r));
 
-      res.json({
-        present,
-        absent
-      });
+      res.json({ present, absent });
     });
   });
 });
-
 
 app.post("/api/fingerprint/stop-session", async (req, res) => {
 
