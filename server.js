@@ -2032,6 +2032,52 @@ app.post("/api/fingerprint/start-session", async (req, res) => {
 
 });
 
+// =====================
+// LIVE ATTENDANCE API
+// =====================
+app.get("/api/fingerprint/attendance-live", (req, res) => {
+  const { subject_name } = req.query;
+
+  if (!subject_name) {
+    return res.status(400).json({ message: "Subject missing" });
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  const presentQuery = `
+    SELECT DISTINCT roll_no
+    FROM attendance
+    WHERE subject_name = ?
+    AND DATE(date) = ?
+  `;
+
+  db.query(presentQuery, [subject_name, today], (err, presentRows) => {
+    if (err) {
+      return res.status(500).json({ message: "DB error (present)" });
+    }
+
+    const present = presentRows.map(r => r.roll_no);
+
+    const allQuery = `
+      SELECT st.roll_no
+      FROM students st
+      JOIN student_subjects ss ON st.roll_no = ss.roll_no
+      WHERE LOWER(ss.subject_name) = LOWER(?)
+    `;
+
+    db.query(allQuery, [subject_name], (err2, allRows) => {
+      if (err2) {
+        return res.status(500).json({ message: "DB error (students)" });
+      }
+
+      const allStudents = allRows.map(r => r.roll_no);
+      const absent = allStudents.filter(r => !present.includes(r));
+
+      res.json({ present, absent });
+    });
+  });
+});
+
 
 app.post("/api/fingerprint/stop-session", async (req, res) => {
 
