@@ -1919,9 +1919,6 @@ app.post("/reset-password", (req, res) => {
 /*app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); */
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
 
 // ============================
 // FINGERPRINT SYSTEM (ALL IN ONE)
@@ -1987,6 +1984,8 @@ app.post("/api/fingerprint/scan", async (req, res) => {
 
 });
 
+
+
 app.get("/api/fingerprint/status", (req, res) => {
 
   const sql = "SELECT roll_no, status FROM fingerprints";
@@ -2032,6 +2031,58 @@ app.post("/api/fingerprint/start-session", async (req, res) => {
   }
 
 });
+
+app.get("/api/fingerprint/attendance-live", (req, res) => {
+  const { subject_name } = req.query;
+
+  if (!subject_name) {
+    return res.status(400).json({ message: "Subject missing" });
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // 1️⃣ Present students
+  const presentQuery = `
+    SELECT DISTINCT roll_no
+    FROM attendance
+    WHERE subject_name = ?
+    AND DATE(date) = ?
+  `;
+
+  db.query(presentQuery, [subject_name, today], (err, presentRows) => {
+    if (err) {
+      console.error("Present Query Error:", err);
+      return res.status(500).json({ message: "DB error (present)" });
+    }
+
+    const present = presentRows.map(r => r.roll_no);
+
+    // 2️⃣ All students (FIXED SUBJECT MATCH ISSUE)
+    const allQuery = `
+      SELECT st.roll_no
+      FROM students st
+      JOIN student_subjects ss ON st.roll_no = ss.roll_no
+      WHERE LOWER(ss.subject_name) = LOWER(?)
+    `;
+
+    db.query(allQuery, [subject_name], (err2, allRows) => {
+      if (err2) {
+        console.error("All Students Query Error:", err2);
+        return res.status(500).json({ message: "DB error (students)" });
+      }
+
+      const allStudents = allRows.map(r => r.roll_no);
+
+      // 3️⃣ Absent calculation
+      const absent = allStudents.filter(r => !present.includes(r));
+
+      res.json({
+        present,
+        absent
+      });
+    });
+  });
+});
 app.post("/api/fingerprint/stop-session", async (req, res) => {
 
   try {
@@ -2053,6 +2104,8 @@ app.post("/api/fingerprint/stop-session", async (req, res) => {
   }
 
 });
+
+
 ////////////////////////////////
 app.get("/api/admin/student-attendance/:rollNo", (req, res) => {
 
@@ -2178,4 +2231,8 @@ app.get("/api/admin/student-fees/:rollNo", (req, res) => {
       }
     );
   });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
