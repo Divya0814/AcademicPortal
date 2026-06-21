@@ -16,7 +16,11 @@ const fs = require("fs");
 const { db, dbPromise } = require("./utils/db");
 const sendMail = require("./utils/mailer");
 const nodemailer = require('nodemailer');//library for sending mails
-const { spawn, exec } = require("child_process");
+const axios = require("axios");
+
+const FP_SERVER =
+"https://foldable-ailene-overfavorably.ngrok-free.dev";
+//const { spawn, exec } = require("child_process");
 // ------------------- APP SETUP -------------------
 //const app = express();
 //creating actual server with http
@@ -1947,81 +1951,48 @@ app.get("/api/admin/students-filter", (req, res) => {
   });
 });
 
-app.post("/api/fingerprint/scan", (req, res) => {
+app.post("/api/fingerprint/scan", async (req, res) => {
 
-  if (process.env.FINGERPRINT_MODE !== "local") {
-    return res.status(200).json({
-      success: false,
-      message: "Fingerprint only works in local machine mode"
-    });
-  }
+  try {
 
-  const { roll_no } = req.body;
+    console.log("Calling fingerprint server...");
 
-  const exePath =
-    "C:\\Users\\Yaswanth\\FingerprintApp48\\bin\\Debug\\net48\\FingerprintApp48.exe";
+    const response = await axios.post(
+      `${FP_SERVER}/scan`,
+      req.body
+    );
 
-  const fpScanProcess = spawn(exePath, ["enroll", roll_no]);
+    console.log("Response from fingerprint server:");
+    console.log(response.data);
 
-  let output = "";
+    return res.json(response.data);
 
-  fpScanProcess.stdout.on("data", (data) => {
-    output += data.toString();
-  });
+  } catch (err) {
 
-  fpScanProcess.stderr.on("data", (data) => {
-    output += data.toString();
-  });
+    console.log("AXIOS ERROR:");
 
-  fpScanProcess.on("error", (err) => {
-    console.error("Fingerprint process error:", err);
+    if (err.response) {
+      console.log(err.response.status);
+      console.log(err.response.data);
+    }
+
+    console.log(err.message);
 
     return res.status(500).json({
       success: false,
-      message: "Fingerprint application failed to start"
-    });
-  });
-
-  fpScanProcess.on("close", () => {
-
-    console.log("===== OUTPUT =====");
-    console.log(output);
-    console.log("==================");
-
-    if (output.toUpperCase().includes("DUPLICATE_FINGER")) {
-
-      return res.json({
-        success: false,
-        duplicate: true,
-        message: "Fingerprint already enrolled"
-      });
-
-    }
-
-    if (output.includes("ENROLLED SUCCESS")) {
-
-      return res.json({
-        success: true,
-        message: "Enrollment successful"
-      });
-
-    }
-
-    return res.json({
-      success: false,
-      message: "Enrollment failed"
+      message: err.message
     });
 
-  });
+  }
 
 });
 
 app.get("/api/fingerprint/status", (req, res) => {
 
-
   const sql = "SELECT roll_no, status FROM fingerprints";
 
   db.query(sql, (err, results) => {
+
     if (err) {
       return res.status(500).json({
         success: false,
@@ -2029,87 +2000,59 @@ app.get("/api/fingerprint/status", (req, res) => {
       });
     }
 
-    // normalize output (IMPORTANT)
     const clean = results.map(r => ({
       roll_no: r.roll_no,
       status: r.status ? r.status.toUpperCase() : "NOT_ENROLLED"
     }));
 
     res.json(clean);
-  });
-});
 
-let fpProcess = null;
-
-app.post("/api/fingerprint/start-session", (req, res) => {
-
-  if (process.env.FINGERPRINT_MODE !== "local") {
-    return res.json({
-      message: "Not supported in cloud mode"
-    });
-  }
-
-  const { subject_name } = req.body;
-
-  if (!subject_name) {
-    return res.status(400).json({
-      message: "Subject missing"
-    });
-  }
-
-  if (fpProcess) {
-    return res.json({
-      message: "Already running"
-    });
-  }
-
-  const exePath =
-    "C:\\Users\\Yaswanth\\FingerprintApp48\\bin\\Debug\\net48\\FingerprintApp48.exe";
-
-  fpProcess = spawn(exePath, ["attend", subject_name]);
-
-  fpProcess.stdout.on("data", (data) => {
-    console.log(data.toString());
-  });
-
-  fpProcess.stderr.on("data", (data) => {
-    console.log("ERR:", data.toString());
-  });
-
-  fpProcess.on("error", (err) => {
-    console.error("Fingerprint process error:", err);
-    fpProcess = null;
-  });
-
-  fpProcess.on("close", () => {
-    console.log("Fingerprint process stopped");
-    fpProcess = null;
-  });
-
-  res.json({
-    message: "Attendance started"
   });
 
 });
-app.post("/api/fingerprint/stop-session", (req, res) => {
+app.post("/api/fingerprint/start-session", async (req, res) => {
 
-  if (process.env.FINGERPRINT_MODE !== "local") {
-    return res.json({
-      message: "Not supported in cloud mode"
+  try {
+
+    const response = await axios.post(
+      `${FP_SERVER}/start-session`,
+      req.body
+    );
+
+    res.json(response.data);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      message: "Fingerprint server offline"
     });
-  }
 
-  if (fpProcess) {
-    fpProcess.kill("SIGTERM");
-    fpProcess = null;
   }
-
-  res.json({
-    message: "Stopped"
-  });
 
 });
+app.post("/api/fingerprint/stop-session", async (req, res) => {
 
+  try {
+
+    const response = await axios.post(
+      `${FP_SERVER}/stop-session`
+    );
+
+    res.json(response.data);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      message: "Fingerprint server offline"
+    });
+
+  }
+
+});
 ////////////////////////////////
 app.get("/api/admin/student-attendance/:rollNo", (req, res) => {
 
