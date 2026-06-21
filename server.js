@@ -2032,47 +2032,6 @@ app.post("/api/fingerprint/start-session", async (req, res) => {
 
 });
 
-app.get("/api/fingerprint/attendance-live", (req, res) => {
-  const { subject_name } = req.query;
-
-  if (!subject_name) {
-    return res.status(400).json({ message: "Subject missing" });
-  }
-
-  const today = new Date().toISOString().split("T")[0];
-
-  // 1️⃣ Present students (already marked)
-  const presentQuery = `
-    SELECT DISTINCT roll_no 
-    FROM attendance 
-    WHERE subject_name = ? AND date = ?
-  `;
-
-  db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) return res.status(500).json({ message: "DB error" });
-
-    const present = presentRows.map(r => r.roll_no);
-
-    // 2️⃣ All students of subject
-    const allQuery = `
-      SELECT st.roll_no
-      FROM students st
-      JOIN student_subjects ss ON st.roll_no = ss.roll_no
-      WHERE ss.subject_name = ?
-    `;
-
-    db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) return res.status(500).json({ message: "DB error" });
-
-      const allStudents = allRows.map(r => r.roll_no);
-
-      // 3️⃣ Absent = not in present
-      const absent = allStudents.filter(r => !present.includes(r));
-
-      res.json({ present, absent });
-    });
-  });
-});
 
 app.post("/api/fingerprint/stop-session", async (req, res) => {
 
