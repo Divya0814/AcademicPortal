@@ -2042,21 +2042,33 @@ app.get("/api/fingerprint/attendance-live", (req, res) => {
     return res.status(400).json({ message: "Subject missing" });
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  // ✅ FIXED: India timezone date (VERY IMPORTANT)
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata"
+  });
 
+  // =========================
+  // 1. PRESENT STUDENTS
+  // =========================
   const presentQuery = `
     SELECT DISTINCT roll_no
     FROM attendance
     WHERE LOWER(subject_name) = LOWER(?)
     AND DATE(date) = ?
-    AND LOWER(status) = 'present'
+    AND TRIM(LOWER(status)) = 'present'
   `;
 
   db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) return res.status(500).json({ message: "DB error" });
+    if (err) {
+      console.error("Present Query Error:", err);
+      return res.status(500).json({ message: "DB error (present)" });
+    }
 
     const present = presentRows.map(r => r.roll_no);
 
+    // =========================
+    // 2. ALL STUDENTS
+    // =========================
     const allQuery = `
       SELECT st.roll_no
       FROM students st
@@ -2065,13 +2077,22 @@ app.get("/api/fingerprint/attendance-live", (req, res) => {
     `;
 
     db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) return res.status(500).json({ message: "DB error" });
+      if (err2) {
+        console.error("All Students Query Error:", err2);
+        return res.status(500).json({ message: "DB error (students)" });
+      }
 
       const allStudents = allRows.map(r => r.roll_no);
 
+      // =========================
+      // 3. ABSENT CALCULATION
+      // =========================
       const absent = allStudents.filter(r => !present.includes(r));
 
-      res.json({ present, absent });
+      res.json({
+        present,
+        absent
+      });
     });
   });
 });
