@@ -2047,14 +2047,13 @@ app.get("/api/fingerprint/attendance-live", (req, res) => {
   const presentQuery = `
     SELECT DISTINCT roll_no
     FROM attendance
-    WHERE subject_name = ?
+    WHERE LOWER(subject_name) = LOWER(?)
     AND DATE(date) = ?
+    AND LOWER(status) = 'present'
   `;
 
   db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) {
-      return res.status(500).json({ message: "DB error (present)" });
-    }
+    if (err) return res.status(500).json({ message: "DB error" });
 
     const present = presentRows.map(r => r.roll_no);
 
@@ -2066,11 +2065,10 @@ app.get("/api/fingerprint/attendance-live", (req, res) => {
     `;
 
     db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) {
-        return res.status(500).json({ message: "DB error (students)" });
-      }
+      if (err2) return res.status(500).json({ message: "DB error" });
 
       const allStudents = allRows.map(r => r.roll_no);
+
       const absent = allStudents.filter(r => !present.includes(r));
 
       res.json({ present, absent });
