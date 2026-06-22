@@ -2031,50 +2031,55 @@ app.post("/api/fingerprint/start-session", async (req, res) => {
   }
 
 });
-
 // =====================
 // LIVE ATTENDANCE API
 // =====================
-app.get("/api/fingerprint/attendance-live", (req, res) => {
-  let { subject_name } = req.query;
+app.get("/api/fingerprint/attendance-live", async (req, res) => {
 
-  if (!subject_name) {
-    return res.status(400).json({ message: "Subject missing" });
-  }
+    try {
 
-  // ✅ FIX: remove bracket text like "(Y3 S5)"
-  subject_name = subject_name.split("(")[0].trim();
+        const response = await axios.get(
+            `${FP_SERVER}/attendance-live`
+        );
 
-  const today = new Date().toISOString().split("T")[0];
+        const present = response.data.present;
 
-  const presentQuery = `
-    SELECT DISTINCT roll_no 
-    FROM attendance 
-    WHERE subject_name = ? AND date = ?
-  `;
+        const allQuery = `
+            SELECT roll_no
+            FROM students
+        `;
 
-  db.query(presentQuery, [subject_name, today], (err, presentRows) => {
-    if (err) return res.status(500).json({ message: "DB error" });
+        db.query(allQuery, (err, rows) => {
 
-    const present = presentRows.map(r => r.roll_no);
+            if (err) {
+                return res.status(500).json({
+                    message: "DB error"
+                });
+            }
 
-    const allQuery = `
-      SELECT st.roll_no
-      FROM students st
-      JOIN student_subjects ss ON st.roll_no = ss.roll_no
-      WHERE ss.subject_name = ?
-    `;
+            const allStudents = rows.map(r => r.roll_no);
 
-    db.query(allQuery, [subject_name], (err2, allRows) => {
-      if (err2) return res.status(500).json({ message: "DB error" });
+            const absent = allStudents.filter(
+                r => !present.includes(r)
+            );
 
-      const allStudents = allRows.map(r => r.roll_no);
+            res.json({
+                present,
+                absent
+            });
 
-      const absent = allStudents.filter(r => !present.includes(r));
+        });
 
-      res.json({ present, absent });
-    });
-  });
+    } catch (err) {
+
+        console.error(err);
+
+        res.status(500).json({
+            message: "Fingerprint server offline"
+        });
+
+    }
+
 });
 
 app.post("/api/fingerprint/stop-session", async (req, res) => {
