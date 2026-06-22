@@ -20,21 +20,16 @@ const axios = require("axios");
 
 const FP_SERVER =
 "https://foldable-ailene-overfavorably.ngrok-free.dev";
-//const { spawn, exec } = require("child_process");
+
 // ------------------- APP SETUP -------------------
-//const app = express();
-//creating actual server with http
 require("dotenv").config();
 const app = express();
 const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: { origin: "*" } 
 }); 
 const PORT = 5000;
-
 const SECRET_KEY = process.env.SECRET_KEY;
-//app.use(cors());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -44,15 +39,12 @@ app.use('/uploads', express.static('uploads'));
 app.use(express.static('uploads'));
 app.use(express.static("frontend"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
 io.on("connection", (socket) => {
   console.log("Student connected");
-
-  db.query("SELECT * FROM notifications ORDER BY id DESC LIMIT 20", (err, rows) => {
+db.query("SELECT * FROM notifications ORDER BY id DESC LIMIT 20", (err, rows) => {
     socket.emit("allNotifications", rows || []);
   });
 });
-
 
 // ------------------- LOGIN ROUTES -------------------
 // ------------------- STUDENT LOGIN (PLAIN-TEXT) -------------------
@@ -423,125 +415,7 @@ app.get("/api/student/:roll_no", (req, res) => {
   });
 });
 
-// -------------------
-// UPDATE STUDENT FEE (SAVE CURRENT PAYMENT & TOTAL PAID)
-// -------------------
-/*app.post("/update-fee", (req, res) => {
-
-  const { roll_no, fee_type, paid_amount, payment_mode } = req.body;
-
-  if (!roll_no || !fee_type || !paid_amount) {
-    return res.status(400).json({
-      error: "roll_no, fee_type and paid_amount required"
-    });
-  }
-
-  const amount = Number(paid_amount);
-
-  if (isNaN(amount) || amount <= 0) {
-    return res.status(400).json({
-      error: "Invalid amount"
-    });
-  }
-
-  const mode = payment_mode || "Cash";
-
-
-  // Decide column values
-  let tuition = 0;
-  let transport = 0;
-  let university = 0;
-
-  if (fee_type === "tuition_paid")
-    tuition = amount;
-
-  else if (fee_type === "transport_paid")
-    transport = amount;
-
-  else if (fee_type === "university_paid")
-    university = amount;
-
-  else
-    return res.status(400).json({
-      error: "Invalid fee type"
-    });
-
-
-  // INSERT payment
-  const insertQuery = `
-    INSERT INTO fee_payments
-    (
-      roll_no,
-      tuition_paid,
-      transport_paid,
-      university_paid,
-      payment_mode,
-      paid_on
-    )
-    VALUES (?, ?, ?, ?, ?, NOW())
-  `;
-
-  db.query(
-    insertQuery,
-    [
-      roll_no.toUpperCase(),
-      tuition,
-      transport,
-      university,
-      mode
-    ],
-    (err, result) => {
-
-      if (err) {
-
-        console.error(err);
-
-        return res.status(500).json({
-          error: "Database insert failed"
-        });
-
-      }
-
-
-      // NOW update students table
-      const updateStudentQuery = `
-        UPDATE students
-        SET paid_amount =
-          COALESCE(paid_amount, 0) + ?
-        WHERE UPPER(roll_no) =
-          UPPER(?)
-      `;
-
-
-      db.query(
-        updateStudentQuery,
-        [amount, roll_no],
-        (err2, result2) => {
-
-          if (err2) {
-
-            console.error(err2);
-
-            return res.status(500).json({
-              error: "Student update failed"
-            });
-
-          }
-
-          res.json({
-            success: true,
-            message: "Payment saved and student updated",
-            added_amount: amount
-          });
-
-        }
-      );
-
-    }
-  );
-
-});
-*/app.post("/update-fee", (req, res) => {
+app.post("/update-fee", (req, res) => {
 
   const { roll_no, fee_type, paid_amount, payment_mode } = req.body;
 
@@ -870,53 +744,7 @@ app.get("/api/attendance/status", (req, res) => {
   });
 });
 
-
-// GET student's subjects & attendance filtered by semester
-/*app.get("/api/student/attendance/:rollNo", (req, res) => {
-  const { rollNo } = req.params;
-
-  // Step 1: Get student's branch, year, semester
-  const studentQuery = "SELECT branch, year, semester FROM students WHERE roll_no = ?";
-  db.query(studentQuery, [rollNo], (err, studentResults) => {
-    if (err) return res.status(500).json({ error: "Database error" });
-    if (studentResults.length === 0) return res.status(404).json({ error: "Student not found" });
-
-    const { branch, year, semester } = studentResults[0];
-
-    // Step 2: Get subjects for this student in their semester
-    const query = `
-     SELECT 
-        s.subject_name,
-        s.semester,
-        IFNULL(a.classes_held, 0) AS classes_held,
-        IFNULL(a.classes_attended, 0) AS classes_attended,
-        IFNULL(a.percentage, 0) AS percentage
-      FROM subjects s
-      LEFT JOIN (
-        SELECT 
-          subject_name,
-          COUNT(*) AS classes_held,
-          SUM(CASE WHEN LOWER(status)='present' THEN 1 ELSE 0 END) AS classes_attended,
-          ROUND(
-            CASE WHEN COUNT(*) = 0 THEN 0
-                 ELSE SUM(CASE WHEN LOWER(status)='present' THEN 1 ELSE 0 END)/COUNT(*)*100
-            END, 2
-          ) AS percentage
-        FROM attendance
-        WHERE roll_no = ?
-        GROUP BY subject_name
-      ) a ON s.subject_name = a.subject_name
-      WHERE s.branch = ? AND s.year = ? AND s.semester = ?
-      ORDER BY s.subject_name
-    `;
-
-    db.query(query, [rollNo, branch, year, semester], (err2, results) => {
-      if (err2) return res.status(500).json({ error: "Database error" });
-      res.json(results);
-    });
-  });
-});
-*/app.get("/api/student/attendance/:rollNo", (req, res) => {
+app.get("/api/student/attendance/:rollNo", (req, res) => {
   const { rollNo } = req.params;
 
   // 1️⃣ Get student details
@@ -1066,44 +894,6 @@ app.get("/api/admin/attendance-matrix", (req, res) => {
     }
   );
 });
-/*app.get("/api/admin/attendance-matrix", (req, res) => {
-  const { department, year } = req.query;
-
-  const query = `
-    SELECT
-      st.roll_no,
-      st.branch,
-      st.year,
-      s.subject_name,
-      COUNT(a.id) AS classes_held,
-      SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) AS attended,
-      IFNULL(
-        ROUND(
-          SUM(CASE WHEN a.status='Present' THEN 1 ELSE 0 END) /
-          NULLIF(COUNT(a.id),0) * 100, 2
-        ),
-        0
-      ) AS percentage
-    FROM students st
-    JOIN subjects s
-      ON s.branch = st.branch AND s.year = st.year
-    LEFT JOIN attendance a
-      ON a.roll_no = st.roll_no
-     AND a.subject_name = s.subject_name
-    WHERE st.branch = ? AND st.year = ?
-    GROUP BY st.roll_no, s.subject_name
-    ORDER BY st.roll_no, s.subject_name;
-  `;
-
-  db.query(query, [department, year], (err, rows) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ error: "DB error" });
-    }
-    res.json(rows);
-  });
-});
-*/
 
 // marks for students
 app.get("/api/student/marks/:roll_no", (req, res) => {
@@ -1279,81 +1069,7 @@ app.delete("/api/admin/notifications/:id", async (req, res) => {
 app.get("/test", (req, res) => {
   res.send("API IS WORKING");
 });
-
-
-// -------------------------------------
-// SUBMIT MID-1
-// -------------------------------------
-/*app.post("/api/marks/mid1", (req, res) => {
-
-  const { subject_name, marks } = req.body;
-
-  if (!subject_name || !marks || marks.length === 0) {
-    return res.json({
-      success: false,
-      message: "Invalid data"
-    });
-  }
-
-  // CHECK IF ALREADY SUBMITTED
-  const checkSql = `
-    SELECT COUNT(*) AS count
-    FROM internal_marks
-    WHERE subject_name = ?
-      AND mid1 IS NOT NULL
-  `;
-
-  db.query(checkSql, [subject_name], (err, result) => {
-
-    if (err) {
-      console.error(err);
-      return res.json({
-        success: false,
-        message: "DB error"
-      });
-    }
-
-    // ALREADY EXISTS
-    if (result[0].count > 0) {
-      return res.json({
-        success: false,
-        message: "MID-1 already submitted 🔒"
-      });
-    }
-
-    // INSERT ONLY ONCE
-    const values = marks.map(m => [
-      m.roll_no,
-      subject_name,
-      m.mid1
-    ]);
-
-    const sql = `
-      INSERT INTO internal_marks
-      (roll_no, subject_name, mid1)
-      VALUES ?
-    `;
-
-    db.query(sql, [values], (err) => {
-
-      if (err) {
-        console.error(err);
-        return res.json({
-          success: false,
-          message: "Database error"
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "MID-1 submitted successfully ✅"
-      });
-
-    });
-
-  });
-
-}); */
+// MIDS
 app.post("/api/marks/mid1", (req, res) => {
 
   const { subject_name, marks } = req.body;
@@ -1461,75 +1177,7 @@ app.get("/api/marks/status", (req, res) => {
     });
   });
 });
-/*app.post("/api/marks/mid2", (req, res) => {
 
-  const { subject_name, marks } = req.body;
-
-  if (!subject_name || !marks || marks.length === 0) {
-    return res.json({
-      success: false,
-      message: "Invalid data"
-    });
-  }
-
-  // CHECK IF ALREADY SUBMITTED
-  const checkSql = `
-    SELECT COUNT(*) AS count
-    FROM internal_marks
-    WHERE subject_name = ?
-      AND mid2 IS NOT NULL
-  `;
-
-  db.query(checkSql, [subject_name], (err, result) => {
-
-    if (err) {
-      console.error(err);
-      return res.json({
-        success: false,
-        message: "DB error"
-      });
-    }
-
-    // ALREADY SUBMITTED
-    if (result[0].count > 0) {
-      return res.json({
-        success: false,
-        message: "MID-2 already submitted 🔒"
-      });
-    }
-
-    const values = marks.map(m => [
-      m.roll_no,
-      subject_name,
-      m.mid2
-    ]);
-
-    const sql = `
-      INSERT INTO internal_marks
-      (roll_no, subject_name, mid2)
-      VALUES ?
-    `;
-
-    db.query(sql, [values], (err) => {
-
-      if (err) {
-        console.error(err);
-        return res.json({
-          success: false,
-          message: "Database error"
-        });
-      }
-
-      res.json({
-        success: true,
-        message: "MID-2 submitted successfully ✅"
-      });
-
-    });
-
-  });
-
-}); */
 // GET student payment summary
 // ----------------------------
 // FEE SUMMARY API
