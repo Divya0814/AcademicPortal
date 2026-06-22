@@ -2044,12 +2044,17 @@ app.get("/api/fingerprint/attendance-live", async (req, res) => {
 
         const present = response.data.present;
 
-        const allQuery = `
-            SELECT roll_no
-            FROM students
-        `;
+      const { subject_name } = req.query;
 
-        db.query(allQuery, (err, rows) => {
+const allQuery = `
+SELECT st.roll_no
+FROM students st
+JOIN student_subjects ss
+ON st.roll_no = ss.roll_no
+WHERE ss.subject_name = ?
+`;
+
+     db.query(allQuery, [subject_name], (err, rows) => {
 
             if (err) {
                 return res.status(500).json({
